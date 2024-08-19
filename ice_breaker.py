@@ -1,29 +1,51 @@
 from dotenv import load_dotenv
 from langchain.prompts.prompt import PromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain_ollama import ChatOllama
-from langchain_core.output_parsers import StrOutputParser
+from langchain.chains import LLMChain
+from typing import Tuple
+
+from output_parsers import summary_parser, Summary
 from third_parties.linkedln import scrape_linkedin_profile
-if __name__ == "__main__":
-    load_dotenv()
+from agents.linkedln_lookup_agent import lookup as linkedin_lookup_agent
 
-    print("Hello LangChain")
+
+
+def ice_break_with(name: str) -> Tuple[Summary, str]:
+    linkedin_username = linkedin_lookup_agent(name=name)
+    linkedin_data = scrape_linkedin_profile(
+        linkedin_profile_url=linkedin_username, mock=True
+    )
+
    
-    summary_template = """
-    given the Linkdln information  about a person I want you to create:
-    1. A short summary
-    2. two interesting facts about them
-    """
 
+    summary_template = """
+    given the information about a person from linkedin {information},
+      I want you to create:
+    1. A short summary
+    2. two interesting facts about them 
+
+    Use both information from twitter and Linkedin
+    \n{format_instructions}
+    """
     summary_prompt_template = PromptTemplate(
-        input_variables=["information"], template=summary_template
+        input_variables=["information"],
+        template=summary_template,
+        partial_variables={
+            "format_instructions": summary_parser.get_format_instructions()
+        },
     )
 
     llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
-    #llm = ChatOllama(model="llama3")
 
-    chain = summary_prompt_template | llm
-    linkdln_data = scrape_linkedin_profile(linkedin_profile_url="https://www.linkedin.com/in/hoang-tu-huynh-a02aa124a/")
-    res = chain.invoke(input={"information": linkdln_data})
+    chain = summary_prompt_template | llm | summary_parser
 
-    print(res)
+    res: Summary = chain.invoke(input={"information": linkedin_data})
+
+    return res, linkedin_data.get("profile_pic_url")
+
+
+if __name__ == "__main__":
+    load_dotenv()
+
+    print("Ice Breaker Enter")
+    ice_break_with(name="Harrison Chase")
